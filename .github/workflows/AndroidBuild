@@ -1,5 +1,6 @@
 name: Android Release
-# 触发条件保持不变：推送 v* tag 或手动触发
+
+# 触发：推送 v* tag 或手动触发
 on:
   push:
     tags:
@@ -8,10 +9,9 @@ on:
 
 jobs:
   # ─────────────────────────────────────────────────────────────
-  # Job 1: 构建 Android APK/AAB
+  # Job 1: 构建 Android APK
   # ─────────────────────────────────────────────────────────────
   build-android:
-    # Android 构建通常在 Linux 环境下进行
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -28,24 +28,20 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.41.2'  # 保持与原文件一致的版本
+          flutter-version: '3.41.2'
           channel: stable
           cache: true
-          # 可以添加 `cache-pub: true` 来缓存 Pub 依赖，加速构建
 
       - name: Setup Java JDK
-        # 文档中未指定JDK版本，但构建Android通常需要特定版本（如JDK 17）。
-        # 基于我所掌握的知识，Flutter Android构建推荐使用JDK 17。
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
 
       - name: Accept Android SDK Licenses
-        # 构建Android应用前需要接受SDK许可
         run: |
-            flutter doctor --android-licenses --verbose
-            yes | sdkmanager --licenses || true
+          flutter doctor --android-licenses --verbose
+          yes | sdkmanager --licenses || true
 
       - name: Get Dependencies
         run: flutter pub get
@@ -53,7 +49,6 @@ jobs:
       - name: Generate Localization
         run: flutter gen-l10n
 
-      # 读取版本号（逻辑与原文件一致）
       - name: Read App Version
         id: version
         run: |
@@ -62,23 +57,18 @@ jobs:
           echo "app_version=$version" >> $GITHUB_OUTPUT
           echo "APP_VERSION=$version" >> $GITHUB_ENV
 
-      # ── 构建 Release 版 APK ──
       - name: Build Android APK (Release)
         run: flutter build apk --release
-        # 如果您需要构建 App Bundle (AAB) 以上架商店，请使用下方命令：
+        # 如需构建 App Bundle (AAB)，请使用下方命令：
         # run: flutter build appbundle --release
 
-      # 可选：构建 Debug 版 APK 用于测试
       - name: Build Android APK (Debug)
         run: flutter build apk --debug
 
-      # ── 整理并重命名构建产物 ──
       - name: Prepare Artifacts
         run: |
           mkdir -p dist
-          # 复制 Release APK
           cp build/app/outputs/flutter-apk/app-release.apk "dist/proxypin-mcp-android-${{ env.APP_VERSION }}-release.apk"
-          # 复制 Debug APK
           cp build/app/outputs/flutter-apk/app-debug.apk "dist/proxypin-mcp-android-${{ env.APP_VERSION }}-debug.apk"
           # 如果构建了 AAB，也复制它
           # cp build/app/outputs/bundle/release/app-release.aab "dist/proxypin-mcp-android-${{ env.APP_VERSION }}.aab"
@@ -91,10 +81,10 @@ jobs:
           if-no-files-found: error
 
   # ─────────────────────────────────────────────────────────────
-  # Job 2: 发布 GitHub Release（依赖 Android 构建任务）
+  # Job 2: 发布 GitHub Release
   # ─────────────────────────────────────────────────────────────
   publish-release:
-    needs: [build-android]  # 依赖关系改为 build-android
+    needs: [build-android]
     runs-on: ubuntu-latest
     permissions:
       contents: write
