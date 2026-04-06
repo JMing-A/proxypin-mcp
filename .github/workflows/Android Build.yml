@@ -1,6 +1,5 @@
 name: Android Release
 
-# 触发：推送 v* tag 或手动触发
 on:
   push:
     tags:
@@ -8,9 +7,6 @@ on:
   workflow_dispatch:
 
 jobs:
-  # ─────────────────────────────────────────────────────────────
-  # Job 1: 构建 Android APK
-  # ─────────────────────────────────────────────────────────────
   build-android:
     runs-on: ubuntu-latest
     permissions:
@@ -32,16 +28,16 @@ jobs:
           channel: stable
           cache: true
 
+      - name: Setup Android SDK and Accept Licenses
+        # 使用此 Action 替代手动运行 `sdkmanager --licenses`
+        # 它会自动安装必要的 SDK 组件并接受所有许可
+        uses: android-actions/setup-android@v3
+
       - name: Setup Java JDK
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
-
-      - name: Accept Android SDK Licenses
-        run: |
-          flutter doctor --android-licenses --verbose
-          yes | sdkmanager --licenses || true
 
       - name: Get Dependencies
         run: flutter pub get
@@ -59,8 +55,6 @@ jobs:
 
       - name: Build Android APK (Release)
         run: flutter build apk --release
-        # 如需构建 App Bundle (AAB)，请使用下方命令：
-        # run: flutter build appbundle --release
 
       - name: Build Android APK (Debug)
         run: flutter build apk --debug
@@ -70,8 +64,6 @@ jobs:
           mkdir -p dist
           cp build/app/outputs/flutter-apk/app-release.apk "dist/proxypin-mcp-android-${{ env.APP_VERSION }}-release.apk"
           cp build/app/outputs/flutter-apk/app-debug.apk "dist/proxypin-mcp-android-${{ env.APP_VERSION }}-debug.apk"
-          # 如果构建了 AAB，也复制它
-          # cp build/app/outputs/bundle/release/app-release.aab "dist/proxypin-mcp-android-${{ env.APP_VERSION }}.aab"
 
       - name: Upload Android APKs
         uses: actions/upload-artifact@v4
@@ -80,9 +72,6 @@ jobs:
           path: dist/
           if-no-files-found: error
 
-  # ─────────────────────────────────────────────────────────────
-  # Job 2: 发布 GitHub Release
-  # ─────────────────────────────────────────────────────────────
   publish-release:
     needs: [build-android]
     runs-on: ubuntu-latest
