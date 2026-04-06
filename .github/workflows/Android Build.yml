@@ -53,9 +53,7 @@ jobs:
           echo "app_version=$version" >> $GITHUB_OUTPUT
           echo "APP_VERSION=$version" >> $GITHUB_ENV
 
-      - name: Build Android APK (Release)
-        run: flutter build apk --release
-
+      
       - name: Build Android APK (Debug)
         run: flutter build apk --debug
 
