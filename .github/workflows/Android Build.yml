@@ -1,0 +1,108 @@
+name: Android Release
+
+# 触发：推送 v* tag 或手动触发
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  # ─────────────────────────────────────────────────────────────
+  # Job 1: 构建 Android APK
+  # ─────────────────────────────────────────────────────────────
+  build-android:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    outputs:
+      app_version: ${{ steps.version.outputs.app_version }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.41.2'
+          channel: stable
+          cache: true
+
+      - name: Setup Java JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Accept Android SDK Licenses
+        run: |
+          flutter doctor --android-licenses --verbose
+          yes | sdkmanager --licenses || true
+
+      - name: Get Dependencies
+        run: flutter pub get
+
+      - name: Generate Localization
+        run: flutter gen-l10n
+
+      - name: Read App Version
+        id: version
+        run: |
+          raw_version=$(grep -E '^version:\s*(.+)$' pubspec.yaml | awk '{print $2}')
+          version=$(echo $raw_version | cut -d'+' -f1)
+          echo "app_version=$version" >> $GITHUB_OUTPUT
+          echo "APP_VERSION=$version" >> $GITHUB_ENV
+
+      - name: Build Android APK (Release)
+        run: flutter build apk --release
+        # 如需构建 App Bundle (AAB)，请使用下方命令：
+        # run: flutter build appbundle --release
+
+      - name: Build Android APK (Debug)
+        run: flutter build apk --debug
+
+      - name: Prepare Artifacts
+        run: |
+          mkdir -p dist
+          cp build/app/outputs/flutter-apk/app-release.apk "dist/proxypin-mcp-android-${{ env.APP_VERSION }}-release.apk"
+          cp build/app/outputs/flutter-apk/app-debug.apk "dist/proxypin-mcp-android-${{ env.APP_VERSION }}-debug.apk"
+          # 如果构建了 AAB，也复制它
+          # cp build/app/outputs/bundle/release/app-release.aab "dist/proxypin-mcp-android-${{ env.APP_VERSION }}.aab"
+
+      - name: Upload Android APKs
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-apks
+          path: dist/
+          if-no-files-found: error
+
+  # ─────────────────────────────────────────────────────────────
+  # Job 2: 发布 GitHub Release
+  # ─────────────────────────────────────────────────────────────
+  publish-release:
+    needs: [build-android]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download All Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: List Release Files
+        run: ls -lh artifacts/
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/*
+          generate_release_notes: true
+          fail_on_unmatched_files: true
